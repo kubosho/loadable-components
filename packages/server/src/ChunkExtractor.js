@@ -195,6 +195,7 @@ class ChunkExtractor {
   }
 
   getChunkGroup(chunk) {
+    // memo: chunkは 'main'
     const chunkGroup = this.stats.namedChunkGroups[chunk]
     invariant(chunkGroup, `cannot find ${chunk} in stats`)
     return chunkGroup
@@ -202,24 +203,29 @@ class ChunkExtractor {
 
   createChunkAsset({ filename, chunk, type, linkType }) {
     return {
-      filename,
+      filename, // memo: 'main.css' or 'main.js'
       scriptType: extensionToScriptType(
         path
           .extname(filename)
           .split('?')[0]
           .toLowerCase(),
-      ),
-      chunk,
-      url: this.resolvePublicUrl(filename),
-      path: path.join(this.outputPath, filename),
-      type,
-      linkType,
+      ), // memo: 'script' or 'style'
+      chunk, // memo: 'main'
+      url: this.resolvePublicUrl(filename), // memo: '/dist/node/' or '/dist/web'
+      path: path.join(this.outputPath, filename), // memo: '/loadable-components/examples/server-side-rendering/public/dist/node/main.js'
+      type, // memo: 'mainAsset'
+      linkType, // memo: 'preload'
     }
   }
 
   getChunkAssets(chunks) {
+    // memo: requireEntrypoint()から呼ばれた場合、defaultの場合はchunksが'main'になるのでone()が呼ばれる
     const one = chunk => {
       const chunkGroup = this.getChunkGroup(chunk)
+      // memo: chunkGroup.assets = [
+      //  "main.css",
+      //  "main.js"
+      // ]
       return chunkGroup.assets
         .map(filename =>
           this.createChunkAsset({
@@ -340,11 +346,17 @@ class ChunkExtractor {
   // Utilities
 
   requireEntrypoint(entrypoint) {
+    // memo: defaultでは 'main' が入る
     entrypoint = entrypoint || this.entrypoints[0]
+    // memo: ex. [{ filename: 'main.js', scriptType: 'script', chunk: 'main', url: '/dist/node', path: 'path/to/main.js', type: 'mainAsset', linkType: 'preload' }]
     const assets = this.getChunkAssets(entrypoint)
     const mainAsset = assets.find(asset => asset.scriptType === 'script')
     invariant(mainAsset, 'asset not found')
 
+    // memo:
+    // "Y-file.js", "letters-A-css.css"... などを読み込み
+    // ここでassets内の全てのファイルを読み込んでいる意味とは…？
+    // → development環境においてファイルのキャッシュを削除する
     this.stats.assets
       .filter(({ name }) => {
         const type = extensionToScriptType(
@@ -359,6 +371,7 @@ class ChunkExtractor {
         smartRequire(path.join(this.outputPath, name.split('?')[0]))
       })
 
+    // public/dist/node/main.jsがrequireされて、その中でclient/App.jsが読み込まれる。
     return smartRequire(mainAsset.path)
   }
 
